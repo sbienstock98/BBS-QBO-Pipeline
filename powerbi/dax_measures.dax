@@ -1,0 +1,341 @@
+// ============================================================
+// BAYSHORE QBO PIPELINE - DAX MEASURES
+// Tampa Fence - Power BI Report
+// ============================================================
+// Instructions: In Power BI Desktop, go to Modeling > New Measure
+// and paste each measure. Organize into Display Folders as noted.
+// ============================================================
+
+
+// ============================================================
+// DISPLAY FOLDER: Revenue
+// ============================================================
+
+Total Revenue =
+    SUM(fact_invoice_line[amount])
+
+Revenue MTD =
+    TOTALMTD([Total Revenue], dim_date[full_date])
+
+Revenue QTD =
+    TOTALQTD([Total Revenue], dim_date[full_date])
+
+Revenue YTD =
+    TOTALYTD([Total Revenue], dim_date[full_date])
+
+Revenue Prior Month =
+    CALCULATE(
+        [Total Revenue],
+        DATEADD(dim_date[full_date], -1, MONTH)
+    )
+
+Revenue MoM Change =
+    VAR _current = [Total Revenue]
+    VAR _prior = [Revenue Prior Month]
+    RETURN
+        IF(
+            NOT ISBLANK(_prior) && _prior <> 0,
+            DIVIDE(_current - _prior, ABS(_prior)),
+            BLANK()
+        )
+
+Revenue Prior Year =
+    CALCULATE(
+        [Total Revenue],
+        SAMEPERIODLASTYEAR(dim_date[full_date])
+    )
+
+Revenue YoY Change =
+    VAR _current = [Total Revenue]
+    VAR _prior = [Revenue Prior Year]
+    RETURN
+        IF(
+            NOT ISBLANK(_prior) && _prior <> 0,
+            DIVIDE(_current - _prior, ABS(_prior)),
+            BLANK()
+        )
+
+Average Invoice Amount =
+    AVERAGE(fact_invoice[total_amount])
+
+Invoice Count =
+    COUNTROWS(fact_invoice)
+
+Revenue per Customer =
+    DIVIDE([Total Revenue], DISTINCTCOUNT(fact_invoice[customer_id]), 0)
+
+
+// ============================================================
+// DISPLAY FOLDER: Accounts Receivable
+// ============================================================
+
+Total AR Outstanding =
+    CALCULATE(
+        SUM(fact_invoice[balance]),
+        fact_invoice[balance] > 0
+    )
+
+AR Not Yet Due =
+    VAR _today = TODAY()
+    RETURN
+    CALCULATE(
+        SUM(fact_invoice[balance]),
+        fact_invoice[balance] > 0,
+        FILTER(fact_invoice, fact_invoice[due_date] >= _today)
+    )
+
+AR 1-30 Days =
+    VAR _today = TODAY()
+    RETURN
+    CALCULATE(
+        SUM(fact_invoice[balance]),
+        fact_invoice[balance] > 0,
+        FILTER(
+            fact_invoice,
+            DATEDIFF(fact_invoice[due_date], _today, DAY) >= 1
+            && DATEDIFF(fact_invoice[due_date], _today, DAY) <= 30
+        )
+    )
+
+AR 31-60 Days =
+    VAR _today = TODAY()
+    RETURN
+    CALCULATE(
+        SUM(fact_invoice[balance]),
+        fact_invoice[balance] > 0,
+        FILTER(
+            fact_invoice,
+            DATEDIFF(fact_invoice[due_date], _today, DAY) >= 31
+            && DATEDIFF(fact_invoice[due_date], _today, DAY) <= 60
+        )
+    )
+
+AR 61-90 Days =
+    VAR _today = TODAY()
+    RETURN
+    CALCULATE(
+        SUM(fact_invoice[balance]),
+        fact_invoice[balance] > 0,
+        FILTER(
+            fact_invoice,
+            DATEDIFF(fact_invoice[due_date], _today, DAY) >= 61
+            && DATEDIFF(fact_invoice[due_date], _today, DAY) <= 90
+        )
+    )
+
+AR Over 90 Days =
+    VAR _today = TODAY()
+    RETURN
+    CALCULATE(
+        SUM(fact_invoice[balance]),
+        fact_invoice[balance] > 0,
+        FILTER(
+            fact_invoice,
+            DATEDIFF(fact_invoice[due_date], _today, DAY) > 90
+        )
+    )
+
+Days Sales Outstanding =
+    VAR _ar = [Total AR Outstanding]
+    VAR _dailyRevenue = DIVIDE([Revenue YTD], DATEDIFF(DATE(YEAR(TODAY()), 1, 1), TODAY(), DAY), 0)
+    RETURN
+        IF(_dailyRevenue > 0, DIVIDE(_ar, _dailyRevenue), BLANK())
+
+Open Invoice Count =
+    CALCULATE(
+        COUNTROWS(fact_invoice),
+        fact_invoice[balance] > 0
+    )
+
+Collection Rate =
+    VAR _payments = SUM(fact_payment[total_amount])
+    VAR _invoiced = [Total Revenue]
+    RETURN DIVIDE(_payments, _invoiced, 0)
+
+
+// ============================================================
+// DISPLAY FOLDER: Accounts Payable
+// ============================================================
+
+Total AP Outstanding =
+    CALCULATE(
+        SUM(fact_bill[balance]),
+        fact_bill[balance] > 0
+    )
+
+AP Current =
+    VAR _today = TODAY()
+    RETURN
+    CALCULATE(
+        SUM(fact_bill[balance]),
+        fact_bill[balance] > 0,
+        FILTER(fact_bill, fact_bill[due_date] >= _today)
+    )
+
+AP 1-30 Days =
+    VAR _today = TODAY()
+    RETURN
+    CALCULATE(
+        SUM(fact_bill[balance]),
+        fact_bill[balance] > 0,
+        FILTER(
+            fact_bill,
+            DATEDIFF(fact_bill[due_date], _today, DAY) >= 1
+            && DATEDIFF(fact_bill[due_date], _today, DAY) <= 30
+        )
+    )
+
+AP 31-60 Days =
+    VAR _today = TODAY()
+    RETURN
+    CALCULATE(
+        SUM(fact_bill[balance]),
+        fact_bill[balance] > 0,
+        FILTER(
+            fact_bill,
+            DATEDIFF(fact_bill[due_date], _today, DAY) >= 31
+            && DATEDIFF(fact_bill[due_date], _today, DAY) <= 60
+        )
+    )
+
+AP Over 60 Days =
+    VAR _today = TODAY()
+    RETURN
+    CALCULATE(
+        SUM(fact_bill[balance]),
+        fact_bill[balance] > 0,
+        FILTER(
+            fact_bill,
+            DATEDIFF(fact_bill[due_date], _today, DAY) > 60
+        )
+    )
+
+Days Payable Outstanding =
+    VAR _ap = [Total AP Outstanding]
+    VAR _totalBilled = CALCULATE(SUM(fact_bill[total_amount]))
+    VAR _days = DATEDIFF(DATE(YEAR(TODAY()), 1, 1), TODAY(), DAY)
+    VAR _dailyExpense = DIVIDE(_totalBilled, _days, 0)
+    RETURN
+        IF(_dailyExpense > 0, DIVIDE(_ap, _dailyExpense), BLANK())
+
+Open Bill Count =
+    CALCULATE(
+        COUNTROWS(fact_bill),
+        fact_bill[balance] > 0
+    )
+
+
+// ============================================================
+// DISPLAY FOLDER: Expenses
+// ============================================================
+
+Total Expenses from Bills =
+    SUM(fact_bill_line[amount])
+
+Total Expenses from Purchases =
+    CALCULATE(
+        SUM(fact_purchase[total_amount]),
+        fact_purchase[is_credit] = FALSE
+    )
+
+Total Expenses =
+    [Total Expenses from Bills] + [Total Expenses from Purchases]
+
+Expenses MTD =
+    TOTALMTD([Total Expenses from Bills], dim_date[full_date])
+    + CALCULATE(
+        TOTALMTD(SUM(fact_purchase[total_amount]), dim_date[full_date]),
+        fact_purchase[is_credit] = FALSE
+    )
+
+Expenses YTD =
+    TOTALYTD([Total Expenses from Bills], dim_date[full_date])
+    + CALCULATE(
+        TOTALYTD(SUM(fact_purchase[total_amount]), dim_date[full_date]),
+        fact_purchase[is_credit] = FALSE
+    )
+
+Expense Ratio =
+    DIVIDE([Total Expenses], [Total Revenue], 0)
+
+
+// ============================================================
+// DISPLAY FOLDER: Profitability
+// ============================================================
+
+Net Income =
+    [Total Revenue] - [Total Expenses]
+
+Net Income YTD =
+    [Revenue YTD] - [Expenses YTD]
+
+Net Margin Pct =
+    DIVIDE([Net Income], [Total Revenue], 0)
+
+Gross Profit =
+    [Total Revenue] - CALCULATE(
+        SUM(fact_bill_line[amount]),
+        RELATEDTABLE(dim_account),
+        dim_account[account_type] = "Cost of Goods Sold"
+    )
+
+Gross Margin Pct =
+    DIVIDE([Gross Profit], [Total Revenue], 0)
+
+
+// ============================================================
+// DISPLAY FOLDER: Cash Flow
+// ============================================================
+
+Cash Inflow =
+    SUM(fact_payment[total_amount])
+
+Cash Outflow =
+    CALCULATE(
+        SUM(fact_purchase[total_amount]),
+        fact_purchase[is_credit] = FALSE
+    )
+
+Net Cash Flow =
+    [Cash Inflow] - [Cash Outflow]
+
+Cash Position =
+    CALCULATE(
+        SUM(dim_account[current_balance]),
+        dim_account[account_type] = "Bank"
+    )
+
+
+// ============================================================
+// DISPLAY FOLDER: Estimates Pipeline
+// ============================================================
+
+Open Estimates Value =
+    CALCULATE(
+        SUM(fact_estimate[total_amount]),
+        ISBLANK(fact_estimate[linked_invoice_id])
+    )
+
+Estimate to Invoice Rate =
+    VAR _converted = COUNTROWS(
+        FILTER(fact_estimate, NOT ISBLANK(fact_estimate[linked_invoice_id]))
+    )
+    VAR _total = COUNTROWS(fact_estimate)
+    RETURN DIVIDE(_converted, _total, 0)
+
+Estimate Count =
+    COUNTROWS(fact_estimate)
+
+Average Estimate Value =
+    AVERAGE(fact_estimate[total_amount])
+
+
+// ============================================================
+// DISPLAY FOLDER: Tax
+// ============================================================
+
+Total Tax Collected =
+    SUM(fact_invoice[total_tax])
+
+Tax Collected YTD =
+    TOTALYTD([Total Tax Collected], dim_date[full_date])

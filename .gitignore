@@ -1,0 +1,29 @@
+# Environment
+.env
+local.settings.json
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Data
+*.csv
+data/
+
+# Secrets
+config/clients.json
+
+# IDE
+.vscode/
+.idea/
+
+# Azure Functions
+.python_packages/
+bin/
+obj/
+
+# Power BI
+*.pbix
+
+# Word temp files
+~$*
